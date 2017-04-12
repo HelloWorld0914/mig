@@ -5,16 +5,26 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MIG"
         mc:Ignorable="d"
-        Title="MainWindow" Height="800" Width="1080">
+        Title="MainWindow" Height="400" Width="600" WindowStartupLocation="CenterScreen">
     <Grid>
-        <StackPanel Name="stack" Margin="0,20,0,0">
+        <StackPanel x:Name="sp" Margin="50,100,50,100" Orientation="Horizontal">
+            <TextBox x:Name="txt_FolderName" Width="450" Height="20"/>
+            <Button x:Name="btn_GetFolderName" Click="GetFolderName" Width="20" Height="20"/>
+        </StackPanel>
+
+
+
+
+
+            <!--<StackPanel Name="stack" Margin="0,20,0,0">
             <ComboBox Name="cmb" Width="300" Height="20">
                 <ComboBoxItem Content="C:\Users\nesi\Desktop\ICR(178) RD(KSKSより）.xls"/>
                 <ComboBoxItem Content="C:\Users\nesi\Desktop\ＪＺ－Ｎ（2016年分）\PIL(181)-核燃料物質実在庫量明細報告書.xls"/>
             </ComboBox>
             <Button Name="btn" Width="80" Height="20" Content="Click!"/>
-            <DataGrid ItemsSource="{Binding}" AutoGenerateColumns="True" Width="1000" Height="500"/>
-        </StackPanel>
+            <TextBox x:Name="SaveDirBox" />
+            <Button Click="SaveButton_OnClick">SaveButton</Button>
+        </StackPanel>-->
 
     </Grid>
 </Window>

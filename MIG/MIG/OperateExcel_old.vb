@@ -1,11 +1,14 @@
-﻿Imports CMN
+﻿Option Strict Off
+
+Imports CMN
 Imports System.IO
 Imports System.Text
 Imports System.Data
 Imports System.Data.SqlClient
 Imports Microsoft.Office.Interop
+Imports System.Configuration
 
-Public Class OperateExcel
+Public Class OperateExcel_old
     Implements IDisposable
 
 #Region "メンバ変数"
@@ -13,7 +16,7 @@ Public Class OperateExcel
     ''' <summary>
     ''' Excelアプリケーション
     ''' </summary>
-    Private xlApp As Excel.Application = Nothing
+    Private mExcelApp As Excel.Application = Nothing
 
     ''' <summary>
     ''' Excelブック(複)
@@ -52,99 +55,105 @@ Public Class OperateExcel
     ''' </remarks>
     Private mSysErrMes As CMN.SysErrorMakeMessage = Nothing
 
-#End Region
-
-#Region "DB"
-
     Private mSqlConn As SqlConnection = Nothing
     Private mSqlAdpt As SqlDataAdapter = Nothing
 
-    Private mOpenStateFlg As Boolean = False
+#End Region
 
-    'Private Sub Open()
-    '    If mOpenStateFlg = False Then
-    '        mSqlConn = New SqlConnection("Data Source=192.168.10.8\sqlsvr01;Initial Catalog=移行DB;User Id=sa;Password=Nesi-2224")
-    '        mSqlConn.Open()
-
-    '        mOpenStateFlg = True
-    '    End If
-    'End Sub
-    'Private Sub Close()
-    '    mSqlConn.Close()
-    '    mSqlConn.Dispose()
-    '    mSqlConn = Nothing
-    '    mOpenStateFlg = False
-    'End Sub
+#Region "DB関連"
 
     ''' <summary>
-    ''' 項目情報を取得します。
+    ''' 接続を開きます。
     ''' </summary>
-    ''' <param name="report">報告書種類。</param>
-    ''' <param name="reportIn">報告書入力種類。</param>
     ''' <returns></returns>
-    Private Function GetColumnData(ByVal report As ReportType, ByVal reportIn As ReportInputType) As DataTable
+    Private Function OpenConnection() As Boolean
+        Try
+            If Not CheckConnectionOpend() Then
+                'mSqlConn = New SqlConnection(ConfigurationManager.ConnectionStrings("MIG.MySettings.ConnectionString").ConnectionString)
+                mSqlConn.Open()
+            End If
+            Return True
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 接続を閉じます。
+    ''' </summary>
+    ''' <returns></returns>
+    Private Function CloseConnection() As Boolean
+        Try
+            If CheckConnectionOpend() Then
+                mSqlConn.Close()
+                mSqlConn.Dispose()
+                mSqlConn = Nothing
+            End If
+
+            Return True
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 接続が開いているか確認します。
+    ''' </summary>
+    ''' <returns></returns>
+    Private Function CheckConnectionOpend() As Boolean
+        Try
+            If IsNothing(mSqlConn) Then Return False
+            If mSqlConn.State <> ConnectionState.Open Then
+                Return False
+            Else
+                Return True
+            End If
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Function
+
+    ''' <summary>
+    ''' 指定したSQL文を実行し、結果を返します。
+    ''' </summary>
+    ''' <param name="sql">実行対象のSQL文。</param>
+    ''' <param name="clone">Trueに設定した場合、DataTableの変更をDBへ反映させることができます。</param>
+    ''' <returns></returns>
+    Private Function GetDBData(ByVal sql As String, Optional ByVal clone As Boolean = False) As DataTable
         Try
             Dim dTable As New DataTable
-            Call Open()
+            Call OpenConnection()
 
-            Dim cmd As New SqlCommand
-            cmd.Connection = mSqlConn
-            Dim sql As New StringBuilder
-            With sql
-                .Append("select * ")
-                .Append("from ")
-                .Append("[移行DB].[dbo].[MIG_" & report.ToString & "_項目情報_" & reportIn.ToString & "]")
-            End With
-            cmd.CommandText = sql.ToString
-
-            Using sqlAdpt = New SqlDataAdapter
-                sqlAdpt.SelectCommand = cmd
-                sqlAdpt.Fill(dTable)
+            Using cmd As New SqlCommand(sql, mSqlConn)
+                If clone Then
+                    'メンバ変数使用
+                    mSqlAdpt = New SqlDataAdapter
+                    mSqlAdpt.SelectCommand = cmd
+                    mSqlAdpt.Fill(dTable)
+                Else
+                    'ローカル変数使用
+                    Using sqlAdpt As New SqlDataAdapter
+                        sqlAdpt.SelectCommand = cmd
+                        sqlAdpt.Fill(dTable)
+                    End Using
+                End If
             End Using
 
             Return dTable
-        Catch ex As Exception
-            Throw
-        End Try
-    End Function
-
-
-    ''' <summary>
-    ''' サーバ上のテーブルをクローンします。
-    ''' </summary>
-    ''' <param name="report">報告書の種類。</param>
-    ''' <remarks>
-    ''' 日付        作成・変更者   内容
-    ''' 2017.03.30  NESI           初版
-    ''' </remarks>
-    Private Function CloneTable(ByVal report As ReportType, ByVal reportIn As ReportInputType) As DataTable
-        Try
-            Dim dTable As New DataTable
-            Call Open()
-
-            Dim cmd As New SqlCommand
-            cmd.Connection = mSqlConn
-            cmd.CommandText = "select * from [移行DB].[dbo].[MIG_" & report.ToString & "_報告書_" & reportIn.ToString & "]"
-
-            mSqlAdpt = New SqlDataAdapter
-            mSqlAdpt.SelectCommand = cmd
-            mSqlAdpt.Fill(dTable)
-
-            Return dTable
 
         Catch ex As Exception
             Throw
         End Try
     End Function
 
-
-
-
     ''' <summary>
-    ''' テーブルの変更を反映します。
+    ''' テーブルの変更をDBに反映します。
     ''' </summary>
     ''' <param name="dTable"></param>
-    Private Sub PushTable(ByVal dTable As DataTable)
+    Private Sub Update(ByVal dTable As DataTable)
         Try
             Dim cmdBuilder As New SqlCommandBuilder(mSqlAdpt)
             mSqlAdpt.Update(dTable)
@@ -157,81 +166,47 @@ Public Class OperateExcel
         End Try
     End Sub
 
-    Private dbObj As CMN.DbAccess
-    Private Function Open() As Boolean
-        Try
-            dbObj = New CMN.DbAccess
-            dbObj.SetCheckDBNames("移行DB")
-            If dbObj.Open("192.168.10.8\sqlsvr01", "sa", "Techno38#") <> CMN.DbAccess.DB_RESULT.OK Then
-                mSysErrMes.AddMes(Reflection.MethodBase.GetCurrentMethod.DeclaringType.ToString,
-                                 Reflection.MethodBase.GetCurrentMethod.Name, dbObj.ErrMessage)
-                Return False
-            End If
+    'Private dbObj As CMN.DbAccess
+    '''' <summary>
+    '''' サーバへの接続をオープンします。
+    '''' </summary>
+    '''' <returns></returns>
+    'Private Function Open() As Boolean
+    '    Try
+    '        dbObj = New CMN.DbAccess
+    '        dbObj.SetCheckDBNames("移行DB")
+    '        If dbObj.Open("192.168.10.8\sqlsvr01", "sa", "Nesi-2224") <> CMN.DbAccess.DB_RESULT.OK Then
+    '            mSysErrMes.AddMes(Reflection.MethodBase.GetCurrentMethod.DeclaringType.ToString,
+    '                             Reflection.MethodBase.GetCurrentMethod.Name, dbObj.ErrMessage)
+    '            Return False
+    '        End If
 
-            Return True
+    '        Return True
 
-        Catch ex As Exception
-            Throw
-        End Try
-    End Function
-    Private Sub Close()
-        Try
-            If Not dbObj Is Nothing Then
-                If dbObj.IsOpen Then
-                    dbObj.Close()
-                End If
-                dbObj.Dispose()
-                dbObj = Nothing
-            End If
-        Catch ex As Exception
-            Throw
-        End Try
-    End Sub
-
-    Private Function CloneTable(ByVal sql As String) As DataTable
-        Try
-            Dim dTable As New DataTable
-            Call Open()
-
-            Using cmd As New SqlCommand(sql, dbObj.ConnectObj)
-                mSqlAdpt = New SqlDataAdapter
-                mSqlAdpt.SelectCommand = cmd
-                mSqlAdpt.Fill(dTable)
-            End Using
-
-            Return dTable
-
-        Catch ex As Exception
-            Throw
-        End Try
-    End Function
-
-    ''' <summary>
-    ''' SQLを実行し、結果を返します。
-    ''' </summary>
-    ''' <param name="sql">SQL分。</param>
-    ''' <returns></returns>
-    Private Function GetDBData(ByVal sql As String) As DataTable
-        Try
-            Dim dTable As New DataTable
-            Call Open()
-
-            Using cmd As New SqlCommand(sql, dbObj.ConnectObj)
-                Using sqlAdpt As New SqlDataAdapter
-                    sqlAdpt.SelectCommand = cmd
-                    sqlAdpt.Fill(dTable)
-                End Using
-            End Using
-
-            Return dTable
-
-        Catch ex As Exception
-            Throw
-        End Try
-    End Function
+    '    Catch ex As Exception
+    '        Throw
+    '    End Try
+    'End Function
+    '''' <summary>
+    '''' サーバとの接続をクローズします。
+    '''' </summary>
+    'Private Sub Close()
+    '    Try
+    '        If Not dbObj Is Nothing Then
+    '            If dbObj.IsOpen Then
+    '                dbObj.Close()
+    '            End If
+    '            dbObj.Dispose()
+    '            dbObj = Nothing
+    '        End If
+    '    Catch ex As Exception
+    '        Throw
+    '    End Try
+    'End Sub
 
 #End Region
 
+#Region "Enum"
     ''' <summary>
     ''' ReleaseExcelComObjectメソッドの引数用
     ''' </summary>
@@ -252,7 +227,9 @@ Public Class OperateExcel
         ヘッダ
         エントリー
     End Enum
+#End Region
 
+#Region "コンストラクタ"
     ''' <summary>
         ''' コンストラクタ
         ''' </summary>
@@ -261,15 +238,52 @@ Public Class OperateExcel
         ''' </remarks>
     Public Sub New()
 
-        'Excel起動
-        xlApp = New Excel.Application()
-
-        ' アラートメッセージの表示／非表示を設定
-        xlApp.DisplayAlerts = False   ' 非表示
-        ' Excelの表示／非表示を設定
-        xlApp.Visible = False   ' 非表示
-
     End Sub
+#End Region
+
+    Public Sub MigrateReportData(ByVal folderName As String)
+        Try
+            Dim fileNameList As New List(Of String)
+            fileNameList = GetFileName(folderName)
+
+            Call OpenExcel()
+
+            For Each fileName As String In fileNameList
+                xlBook = xlBooks.Open(xlFileName)
+                xlSheets = xlBook.Worksheets
+                xlSheet = xlSheets(2)
+
+
+
+
+            Next
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Sub
+
+
+    Private Sub SetReportData()
+        Try
+
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Sub
+
+    Public Function GetFileName(ByVal folderName) As List(Of String)
+        Try
+            Dim fileNameList As New List(Of String)
+            fileNameList.AddRange(System.IO.Directory.GetFiles(folderName, "*", System.IO.SearchOption.AllDirectories))
+
+            Return fileNameList
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Function
 
     ''' <summary>
     ''' 報告書のデータを読み込みます。(ICR、PIL)
@@ -295,6 +309,25 @@ Public Class OperateExcel
     End Sub
 
 
+    ''' <summary>
+    ''' Excelファイルを開きます。
+    ''' </summary>
+    Private Sub OpenExcel()
+        Try
+            ' Excel起動
+            mExcelApp = New Excel.Application()
+            ' アラートメッセージの表示／非表示を設定
+            mExcelApp.DisplayAlerts = False   ' 非表示
+            ' Excelの表示／非表示を設定
+            mExcelApp.Visible = False   ' 非表示
+            ' Excelファイルを開く
+            xlBooks = mExcelApp.Workbooks
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Sub
+
 
     ''' <summary>
     ''' 指定したExcelファイルを開きます。
@@ -305,8 +338,6 @@ Public Class OperateExcel
             '作成するExcelファイル名
             xlFileName = filePath
 
-            'Excelファイルを開く
-            xlBooks = xlApp.Workbooks
             xlBook = xlBooks.Open(xlFileName)
 
             'Excelファイルのシートを開く
@@ -327,13 +358,26 @@ Public Class OperateExcel
     Private Sub GetReportHedding(ByVal rep As ReportType)
         Try
             Dim dTable As New DataTable
-            dTable = CloneTable(rep, ReportInputType.ヘッダ)
+            Dim sqlBuilder As New StringBuilder
+            With sqlBuilder
+                .Append("select * ")
+                .Append("from ")
+                .Append("[移行DB].[dbo].[MIG_" & rep.ToString & "_報告書_" & ReportInputType.ヘッダ.ToString & "]")
+            End With
+            '更新用DataTable
+            dTable = GetDBData(sqlBuilder.ToString, True)
 
             '最初の行番号
             Dim currentRow As Integer = 11
             '項目の情報取得
             Dim columnData As New DataTable
-            columnData = GetColumnData(rep, ReportInputType.ヘッダ)
+            sqlBuilder.Clear()
+            With sqlBuilder
+                .Append("select * ")
+                .Append("from ")
+                .Append("[移行DB].[dbo].[MIG_" & rep.ToString & "_項目情報_" & ReportInputType.ヘッダ.ToString & "]")
+            End With
+            columnData = GetDBData(sqlBuilder.ToString)
 
             Dim reportData As New Dictionary(Of String, String)
             For Each row As DataRow In columnData.Rows
@@ -343,7 +387,69 @@ Public Class OperateExcel
 
             dTable.Rows.Add(GetFormatReportData(dTable, reportData))
 
-            Call PushTable(dTable)
+            Call Update(dTable)
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Sub
+
+    Private Sub GetReportEntry(ByVal rep As ReportType)
+        Try
+            Dim dTable As New DataTable
+            Dim sqlBuilder As New StringBuilder
+            With sqlBuilder
+                .Append("select * ")
+                .Append("from ")
+                .Append("[移行DB].[dbo].[MIG_" & rep.ToString & "_報告書_" & ReportInputType.エントリー.ToString & "]")
+            End With
+            '更新用DataTable
+            dTable = GetDBData(sqlBuilder.ToString, True)
+
+            '最初の行番号
+            Dim currentRow As Integer = 20
+            '項目の情報取得
+            Dim columnData As New DataTable
+            sqlBuilder.Clear()
+            With sqlBuilder
+                .Append("select * ")
+                .Append("from ")
+                .Append("[移行DB].[dbo].[MIG_" & rep.ToString & "_項目情報_" & ReportInputType.エントリー.ToString & "]")
+            End With
+            columnData = GetDBData(sqlBuilder.ToString)
+
+            Dim headerNo As New DataTable
+            sqlBuilder.Clear()
+            With sqlBuilder
+                .Append("select ID ")
+                .Append("from ")
+                .Append("[移行DB].[dbo].[MIG_" & rep.ToString & "_報告書_" & ReportInputType.ヘッダ.ToString & "] ")
+                .Append("where ID = ")
+                .Append("(select max(ID) ")
+                .Append("from ")
+                .Append("[移行DB].[dbo].[MIG_" & rep.ToString & "_報告書_" & ReportInputType.ヘッダ.ToString & "])")
+            End With
+            headerNo = GetDBData(sqlBuilder.ToString)
+
+            Do While (Not IsNothing(xlSheet.Range("B" & currentRow).Value))
+                'ページ終端行ならスキップ
+                If Not xlSheet.Range("B" & currentRow).Value.ToString = "1" Then
+                    Dim reportData As New Dictionary(Of String, String)
+                    reportData.Add("報告書管理番号", headerNo.Rows(0)(0))
+                    For Each row As DataRow In columnData.Rows
+                        Dim arrData(,) As Object = xlSheet.Range(xlSheet.Cells(currentRow, row("列番号")), xlSheet.Cells(currentRow, row("列番号") + row("文字数") - 1)).Value
+                        reportData.Add(row("列名"), CombineCharacter(arrData))
+                    Next
+                    dTable.Rows.Add(GetFormatReportData(dTable, reportData))
+
+                End If
+
+                '次の行の分カウント増加
+                currentRow = currentRow + 2
+
+            Loop
+
+            Call Update(dTable)
 
         Catch ex As Exception
             Throw
@@ -373,50 +479,18 @@ Public Class OperateExcel
         End Try
     End Function
 
-    Private Sub GetReportEntry(ByVal rep As ReportType)
-        Try
-            Dim dTable As New DataTable
-            dTable = CloneTable(rep, ReportInputType.ヘッダ)
-
-            '最初の行番号
-            Dim currentRow As Integer = 20
-            '項目の情報取得
-            Dim columnData As New DataTable
-            columnData = GetColumnData(rep, ReportInputType.エントリー)
-
-            Do While (Not IsNothing(xlSheet.Range("B" & currentRow).Value))
-                'ページ終端行ならスキップ
-                If Not xlSheet.Range("B" & currentRow).Value.ToString = "1" Then
-                    Dim reportData As New Dictionary(Of String, String)
-                    For Each row As DataRow In columnData.Rows
-                        Dim arrData(,) As Object = xlSheet.Range(xlSheet.Cells(currentRow, row("列番号")), xlSheet.Cells(currentRow, row("列番号") + row("文字数") - 1)).Value
-                        reportData.Add(row("列名"), CombineCharacter(arrData))
-                    Next
-                    dTable.Rows.Add(GetFormatReportData(dTable, reportData))
-
-                End If
-
-                '次の行の分カウント増加
-                currentRow = currentRow + 2
-
-            Loop
-
-            Call PushTable(dTable)
-
-        Catch ex As Exception
-            Throw
-        End Try
-    End Sub
-
+    ''' <summary>
+    ''' 文字列を結合します。
+    ''' </summary>
+    ''' <param name="target">結合対象。</param>
+    ''' <returns></returns>
     Private Function CombineCharacter(ByVal target As Object(,)) As String
         Dim combinedString As String = ""
         For Each v As String In target
-            combinedString = combinedString + v
+            combinedString = combinedString & v
         Next
         Return combinedString
     End Function
-
-
 
 #Region "dispose"
 
@@ -486,15 +560,15 @@ Public Class OperateExcel
                 xlBooks = Nothing
             End If
 
-            ' xlApp解放
-            If Not xlApp Is Nothing Then
+            ' mExcelApp解放
+            If Not mExcelApp Is Nothing Then
                 Try
                     ' アラートを戻す
-                    xlApp.DisplayAlerts = True
-                    xlApp.Quit()
+                    mExcelApp.DisplayAlerts = True
+                    mExcelApp.Quit()
                 Finally
-                    System.Runtime.InteropServices.Marshal.ReleaseComObject(xlApp)
-                    xlApp = Nothing
+                    System.Runtime.InteropServices.Marshal.ReleaseComObject(mExcelApp)
+                    mExcelApp = Nothing
                 End Try
             End If
 
@@ -553,15 +627,15 @@ Public Class OperateExcel
     '        '    Exit Sub
     '        'End If
 
-    '        ' xlApp解放
-    '        If Not xlApp Is Nothing Then
+    '        ' mExcelApp解放
+    '        If Not mExcelApp Is Nothing Then
     '            Try
     '                ' アラートを戻す
-    '                xlApp.DisplayAlerts = True
-    '                xlApp.Quit()
+    '                mExcelApp.DisplayAlerts = True
+    '                mExcelApp.Quit()
     '            Finally
-    '                System.Runtime.InteropServices.Marshal.ReleaseComObject(xlApp)
-    '                xlApp = Nothing
+    '                System.Runtime.InteropServices.Marshal.ReleaseComObject(mExcelApp)
+    '                mExcelApp = Nothing
     '            End Try
     '        End If
 
