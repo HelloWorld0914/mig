@@ -7,24 +7,12 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="400" Width="600" WindowStartupLocation="CenterScreen">
     <Grid>
-        <StackPanel x:Name="sp" Margin="50,100,50,100" Orientation="Horizontal">
-            <TextBox x:Name="txt_FolderName" Width="450" Height="20"/>
-            <Button x:Name="btn_GetFolderName" Click="GetFolderName" Width="20" Height="20"/>
-        </StackPanel>
 
-
-
-
-
-            <!--<StackPanel Name="stack" Margin="0,20,0,0">
-            <ComboBox Name="cmb" Width="300" Height="20">
-                <ComboBoxItem Content="C:\Users\nesi\Desktop\ICR(178) RD(KSKSより）.xls"/>
-                <ComboBoxItem Content="C:\Users\nesi\Desktop\ＪＺ－Ｎ（2016年分）\PIL(181)-核燃料物質実在庫量明細報告書.xls"/>
-            </ComboBox>
-            <Button Name="btn" Width="80" Height="20" Content="Click!"/>
-            <TextBox x:Name="SaveDirBox" />
-            <Button Click="SaveButton_OnClick">SaveButton</Button>
-        </StackPanel>-->
-
+            <StackPanel x:Name="sp" Margin="50,100,50,100" Orientation="Horizontal">
+                <TextBox x:Name="txt_FolderName" Width="400" Height="20"/>
+                <Button x:Name="btn_GetFolderName" Click="GetFolderName" Width="20" Height="20"/>
+                <Button x:Name="btn_start" Click="btn_Start_Click" Width="50" Height="20" Content="Go!"/>
+            </StackPanel>
+         
     </Grid>
 </Window>

@@ -105,8 +105,6 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Compile Include="DBAccess.vb" />
-    <Compile Include="MigurateBefore2012.vb" />
-    <Compile Include="OperateExcel_old.vb" />
     <Compile Include="OperateExcel_NetOffice.vb" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -169,7 +167,7 @@
     </None>
     <AppDesigner Include="My Project\" />
     <None Include="packages.config" />
-    <None Include="移行データ.xlsx" />
+    <None Include="報告データ一覧.xlsx" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config">

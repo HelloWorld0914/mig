@@ -17,7 +17,26 @@ Public Class OperateExcel_NetOffice
     ''' <summary>
     ''' 出力用フォーマットのフルパス。
     ''' </summary>
-    Private mFormatPath As String = "D:\Git\MIG\核燃料物質管理システム\ProgramFiles\MIG\MIG\移行データ.xlsx"
+    Private mFormatPath As String = "D:\Git\MIG\MIG\MIG\報告データ一覧.xlsx"
+
+    Private mErrorFilePath As String = ""
+
+    Private mHeaderDataList As List(Of List(Of String)) = Nothing
+    Private mICRDataList As List(Of List(Of String)) = Nothing
+    Private mPILDataList As List(Of List(Of String)) = Nothing
+    Private mMBRDataList As List(Of List(Of String)) = Nothing
+    Private mOCR1DataList As List(Of List(Of String)) = Nothing
+    Private mOCR3DataList As List(Of List(Of String)) = Nothing
+    Private mConciseDataList As List(Of List(Of String)) = Nothing
+
+    Private mHeaderFieldList As List(Of String) = Nothing
+    Private mICRFieldList As List(Of String) = Nothing
+    Private mPILFieldList As List(Of String) = Nothing
+    Private mMBRFieldList As List(Of String) = Nothing
+    Private mOCR1FieldList As List(Of String) = Nothing
+    Private mOCR3FieldList As List(Of String) = Nothing
+    Private mConciseFieldList As List(Of String) = Nothing
+
 #End Region
 
 #Region "列挙型"
@@ -30,6 +49,7 @@ Public Class OperateExcel_NetOffice
         MBR = 5
         OCR1 = 6
         OCR3 = 7
+        注釈 = 8
     End Enum
     ''' <summary>
     ''' 報告書の入力種類を表します。
@@ -55,6 +75,9 @@ Public Class OperateExcel_NetOffice
     ''' <param name="folderPath">対象フォルダのフルパス。</param>
     Public Sub MigrateReportData(ByVal folderPath As String)
         Try
+            Dim sw As New System.Diagnostics.Stopwatch()
+            sw.Start()
+
             Dim dTableForHeader As New DataTable
             Dim dTableDictionalyForEntry As New Dictionary(Of String, DataTable)
 
@@ -63,25 +86,61 @@ Public Class OperateExcel_NetOffice
 
             Call loadReport(dTableForHeader, dTableDictionalyForEntry, getFilePath(folderPath))
 
+            Call OutputReportData(dTableForHeader, dTableDictionalyForEntry)
+
+            sw.Stop()
+
+            MessageBox.Show("Success. " & sw.Elapsed.ToString)
+
         Catch ex As Exception
-            MessageBox.Show(ex.Message)
+            MessageBox.Show(ex.Message & vbCrLf & "Path : " & mErrorFilePath)
+        Finally
             Dispose()
+            MessageBox.Show("Dispose Completed.")
         End Try
     End Sub
+#End Region
 
+#Region "報告書取込"
     ''' <summary>
     ''' 各種DataTableの初期設定を行います。
     ''' </summary>
-    ''' <param name="dTableDictionaryForHeader">ヘッダ用DataTable。</param>
+    ''' <param name="dTableForHeader">ヘッダ用DataTable。</param>
     ''' <param name="dTableDictionaryForEntry">エントリー用DataTable。</param>
-    Private Sub InitDataTable(ByRef dTableDictionaryForHeader As DataTable, ByRef dTableDictionaryForEntry As Dictionary(Of String, DataTable))
+    Private Sub InitDataTable(ByRef dTableForHeader As DataTable, ByRef dTableDictionaryForEntry As Dictionary(Of String, DataTable))
         Try
-            dTableDictionaryForHeader = FormatDataTable()
+            dTableForHeader = formatDataTable()
 
-            Dim reportTypeList As New List(Of ReportType)(New ReportType() {ReportType.ICR, ReportType.PIL, ReportType.MBR, ReportType.OCR1, ReportType.OCR3})
+            Dim reportTypeList As New List(Of ReportType)(New ReportType() {ReportType.ICR, ReportType.PIL, ReportType.MBR, ReportType.OCR1, ReportType.OCR3, ReportType.注釈})
             For Each rep As ReportType In reportTypeList
-                dTableDictionaryForEntry.Add(rep.ToString, FormatDataTable(rep))
+                dTableDictionaryForEntry.Add(rep.ToString, formatDataTable(rep))
             Next
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Sub
+
+    Private Sub setFieldList(Optional ByVal repType As ReportType = 0)
+        Try
+            If repType = ReportType.ICR Then
+                If IsNothing(mHeaderFieldList) Then
+                    mHeaderFieldList = New List(Of String)
+                End If
+            ElseIf repType = ReportType.PIL Then
+
+            ElseIf repType = ReportType.MBR Then
+
+            ElseIf repType = ReportType.OCR1 Then
+
+            ElseIf repType = ReportType.OCR3 Then
+
+            ElseIf repType = ReportType.注釈 Then
+
+            Else
+
+            End If
+
 
         Catch ex As Exception
             Throw
@@ -91,13 +150,14 @@ Public Class OperateExcel_NetOffice
     ''' <summary>
     ''' 指定した報告書を読み込み、データを取得します。
     ''' </summary>
-    ''' <param name="dTableDictionalyForHeader">データ格納用DataTable(ヘッダ)。</param>
-    ''' <param name="dTableDictionalyForEntry">データ格納用DataTable(エントリー)。</param>
+    ''' <param name="dTableForHeader">データ格納用DataTable(ヘッダ)。</param>
+    ''' <param name="dTableDictionalyForEntry">データ格納用Dictionary(エントリー)。</param>
     ''' <param name="filePathList">対象ファイルのフルパスを格納したリスト。</param>
     Private Sub loadReport(ByRef dTableForHeader As DataTable, ByRef dTableDictionalyForEntry As Dictionary(Of String, DataTable), ByVal filePathList As List(Of String))
         Try
             '全ファイルやるやつ
             For Each filePath As String In filePathList
+                mErrorFilePath = filePath
                 'Excelブックオープン
                 Dim xlBook As NetOffice.ExcelApi.Workbook = openExcelBook(filePath)
                 '2012年以前か2012年以降かを判断する
@@ -155,11 +215,14 @@ Public Class OperateExcel_NetOffice
             Dim sheetNameList As List(Of String) = getSheetName(xlBook)
             '対象シート名取得
             Dim targetSheetName As String = ""
+            Dim conciseNoteName As String = ""
             For Each sheetName As String In sheetNameList
-                If sheetName Like "*入力*" Then
-                    targetSheetName = sheetName
-                End If
+                '[〇〇入力]というシート名が対象
+                If sheetName Like "*入力*" Then targetSheetName = sheetName
+                '注釈があればTrue
+                If sheetName Like "*注釈*" Then conciseNoteName = sheetName
             Next
+
             'Excelシートオープン
             Dim xlSheet As NetOffice.ExcelApi.Worksheet = getExcelSheet(targetSheetName, xlBook)
             '報告書種類取得
@@ -168,6 +231,12 @@ Public Class OperateExcel_NetOffice
             Call setReportHeader(dTableHeader, xlSheet, rep, ReportYear.After2013)
             'エントリー情報取得
             Call setReportEntry(dTableDictionaryForEntry(rep.ToString), xlSheet, rep, ReportYear.After2013)
+            '注釈があれば追加する
+            If Not conciseNoteName = "" Then
+                Dim xlSheetForConciseNote As NetOffice.ExcelApi.Worksheet = getExcelSheet(conciseNoteName, xlBook)
+                Call setReportEntry(dTableDictionaryForEntry(ReportType.注釈.ToString), xlSheetForConciseNote, ReportType.注釈, ReportYear.After2013)
+            End If
+
 
         Catch ex As Exception
             Throw
@@ -195,7 +264,13 @@ Public Class OperateExcel_NetOffice
                 endColumnIdx = 1
             Else
                 '2013年以降
-                targetRowIdx = 11
+                If repType = ReportType.ICR OrElse repType = ReportType.OCR1 OrElse repType = ReportType.OCR3 OrElse repType = ReportType.注釈 Then
+                    targetRowIdx = 11
+                ElseIf repType = ReportType.PIL Then
+                    targetRowIdx = 12
+                ElseIf repType = ReportType.MBR Then
+                    targetRowIdx = 13
+                End If
                 startColumnIdx = 2
                 endColumnIdx = 2
             End If
@@ -209,8 +284,6 @@ Public Class OperateExcel_NetOffice
 
             'ヘッダ情報を取得
             Dim excelDataList As List(Of String) = getRangeExcelData(xlSheet, targetRowIdx, startColumnIdx, targetRowIdx, endColumnIdx)
-            '報告書の種類を追加
-            excelDataList.Add(repType.ToString)
 
             'ヘッダ用DataTableに格納
             Call setLoadedReportData(dTableHeader, excelDataList, fieldLengthList, repType, ReportInput.Header)
@@ -227,7 +300,7 @@ Public Class OperateExcel_NetOffice
     ''' <param name="xlSheet"></param>
     ''' <param name="repType"></param>
     ''' <param name="repYear"></param>
-    Private Sub setReportEntry(ByVal dTableEntry As DataTable, ByVal xlSheet As NetOffice.ExcelApi.Worksheet, ByVal repType As ReportType, ByVal repYear As ReportYear)
+    Private Sub setReportEntry(ByVal xlSheet As NetOffice.ExcelApi.Worksheet, ByVal repType As ReportType, ByVal repYear As ReportYear)
         Try
             Dim targetRowIdx As Integer = 0 '対象の行インデックス
             Dim startColumnIdx As Integer = 0 '対象の最初の列インデックス
@@ -240,9 +313,10 @@ Public Class OperateExcel_NetOffice
                 targetRowIdx = 10
                 startColumnIdx = 1
                 endColumnIdx = 1
+                incremental = 1
             Else
                 '2013年以降
-                If repType = ReportType.ICR OrElse repType = ReportType.PIL Then
+                If repType = ReportType.ICR OrElse repType = ReportType.PIL OrElse repType = ReportType.注釈 Then
                     targetRowIdx = 20
                 ElseIf repType = ReportType.MBR Then
                     targetRowIdx = 21
@@ -299,6 +373,17 @@ Public Class OperateExcel_NetOffice
                 Next
                 reportDataList.Add(combined.ToString)
             Next
+            If repInput = ReportInput.Header Then
+                'ヘッダ情報の場合、[事業所コード]と[扱者氏名]の情報を削除する
+                reportDataList.RemoveAt(0)
+                reportDataList.RemoveAt(reportDataList.Count - 1)
+            ElseIf repInput = ReportInput.Entry Then
+                If repType = ReportType.OCR3 Then
+                    reportDataList.RemoveAt(6)
+                ElseIf repType = ReportType.注釈 Then
+                    reportDataList.Insert(3, "")
+                End If
+            End If
 
             '追加用DataRow
             Dim dRow As DataRow = dTable.NewRow
@@ -310,13 +395,32 @@ Public Class OperateExcel_NetOffice
                 'ヘッダ情報の場合
                 If repInput = ReportInput.Header Then
                     '項目名が[F_報告期間]かつ報告書種類が在庫系の場合、スキップする
-                    If column.ColumnName = "F_報告期間" AndAlso repType = ReportType.PIL OrElse repType = ReportType.OCR1 Then
-                        Continue For
+                    If column.ColumnName = "報告期間FROM" Then
+                        If repType = ReportType.PIL OrElse repType = ReportType.OCR3 Then Continue For
                     End If
-                    '項目名が[報告書タイプ]の場合、報告書種類を追加して終わり
-                    If column.ColumnName = "報告書タイプ" Then
-                        dRow(column.ColumnName) = repType.ToString
+                    '項目名が[報告書タイプ]の場合、報告書種類を追加して終了する
+                    If column.ColumnName = "報告書区分" Then
+                        Dim repCode As String = ""
+                        Select Case repType
+                            Case ReportType.ICR
+                                repCode = "1"
+                            Case ReportType.PIL
+                                repCode = "4"
+                            Case ReportType.MBR
+                                repCode = "6"
+                            Case ReportType.OCR1
+                                repCode = "A"
+                            Case ReportType.OCR3
+                                repCode = "E"
+                            Case ReportType.注釈
+                                repCode = "2"
+                        End Select
+                        dRow(column.ColumnName) = repCode
                         Exit For
+                    End If
+                ElseIf repInput = ReportInput.Entry Then
+                    If column.ColumnName = "棚卸日" OrElse column.ColumnName = "棚卸実施日" Then
+                        Continue For
                     End If
                 End If
                 dRow(column.ColumnName) = reportDataList(reportDataIdx)
@@ -325,6 +429,71 @@ Public Class OperateExcel_NetOffice
 
             'データ追加
             dTable.Rows.Add(dRow)
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Sub
+#End Region
+
+#Region "報告書出力"
+    Private Sub outputReportData()
+        Try
+            '新しいExcelブックをデスクトップに作成する
+            Dim newFilePath As String =
+                System.Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory) & "\報告データ_" & DateTime.Now.ToString("yyyyMMdd") & ".xlsx"
+            Call copyExcelBook(mFormatPath, newFilePath, True)
+            '[_項目文字数情報]シートを削除する
+            Call deleteExcelSheet(newFilePath, "_項目文字数情報")
+
+            Dim xlBook As NetOffice.ExcelApi.Workbook = openExcelBook(newFilePath)
+            Dim sheetNameList As List(Of String) = getSheetName(xlBook)
+            For Each sheetName As String In sheetNameList
+                Dim xlSheet As NetOffice.ExcelApi.Worksheet = getExcelSheet(sheetName, xlBook)
+                Dim outputList As List(Of List(Of String)) = Nothing
+
+                Select Case getReportType(sheetName)
+                    Case ReportType.ICR
+                        outputList = mICRList
+                    Case ReportType.PIL
+                        outputList = mPILList
+                    Case ReportType.MBR
+                        outputList = mMBRList
+                    Case ReportType.OCR1
+                        outputList = mOCR1List
+                    Case ReportType.OCR3
+                        outputList = mOCR3List
+                    Case ReportType.注釈
+                        outputList = mConciseList
+                    Case Else
+                        outputList = mHeaderList
+                End Select
+
+                If outputList.Count = 0 Then Continue For
+
+                Dim maxRow As Integer = outputList.Count
+                Dim maxColumn As Integer = outputList(0).Count
+
+                Dim outputArray(maxRow - 1, maxColumn - 1) As String
+                For i As Integer = 0 To maxRow - 1
+                    For j As Integer = 0 To maxColumn - 1
+                        outputArray(i, j) = outputList(i)(j)
+                    Next
+                Next
+
+                Dim startRange As NetOffice.ExcelApi.Range = xlSheet.Cells(2, 1)
+                Dim endRange As NetOffice.ExcelApi.Range = xlSheet.Cells(maxRow, maxColumn)
+
+                Dim columnList As List(Of String) = getRangeExcelData(xlSheet, 1, 1, 1, 26, True)
+                For i As Integer = 0 To columnList.Count - 1
+                    xlSheet.Range(xlSheet.Cells(2, i + 1), xlSheet.Cells(maxRow, i + 1)).Value = If(columnList(i) Like "*日*", "yyyy/m/d", "@")
+                Next
+
+                xlSheet.Range(startRange, endRange).Value = outputArray
+
+            Next
+            xlBook.Save()
+
 
         Catch ex As Exception
             Throw
@@ -344,7 +513,7 @@ Public Class OperateExcel_NetOffice
                 mExcelApp.Visible = False
             End If
             If IsNothing(mExcelBookForFormat) Then
-                mExcelBookForFormat = mExcelApp.Workbooks(mFormatPath)
+                mExcelBookForFormat = mExcelApp.Workbooks.Open(mFormatPath)
             End If
 
         Catch ex As Exception
@@ -386,11 +555,11 @@ Public Class OperateExcel_NetOffice
     ''' <summary>
     ''' 指定したファイルの報告書種類を取得します。
     ''' </summary>
-    ''' <param name="filePath">対象ファイルのフルパス。</param>
+    ''' <param name="file">対象名。</param>
     ''' <returns>報告書種類。対象外のファイルの場合Nothingを返す。</returns>
     Private Function getReportType(ByVal file As String) As ReportType
         Try
-            Dim rep As ReportType = Nothing
+            Dim rep As ReportType = 0
             If IO.Path.GetFileNameWithoutExtension(file) Like "*ICR*" Then
                 rep = ReportType.ICR
             ElseIf IO.Path.GetFileNameWithoutExtension(file) Like "*PIL*" Then
@@ -401,7 +570,14 @@ Public Class OperateExcel_NetOffice
                 rep = ReportType.OCR1
             ElseIf IO.Path.GetFileNameWithoutExtension(file) Like "*OCR3*" Then
                 rep = ReportType.OCR3
+            ElseIf IO.Path.GetFileNameWithoutExtension(file) Like "*注釈*" Then
+                rep = ReportType.注釈
             End If
+
+            If rep = 0 AndAlso IO.Path.GetFileNameWithoutExtension(file) Like "*OCR*" Then
+                rep = ReportType.OCR1
+            End If
+
             Return rep
 
         Catch ex As Exception
@@ -416,36 +592,11 @@ Public Class OperateExcel_NetOffice
     Private Function getSheetName(ByVal xlBook As NetOffice.ExcelApi.Workbook) As List(Of String)
         Try
             Dim sheetNameList As New List(Of String)
-            For Each xlSheet As NetOffice.ExcelApi.Worksheet In xlBook.Worksheets
+            For Each xlSheet As NetOffice.ExcelApi.Worksheet In xlBook.Sheets
+                If xlSheet.Name Like "*Sheet*" Then Continue For
                 sheetNameList.Add(xlSheet.Name)
             Next
             Return sheetNameList
-
-        Catch ex As Exception
-            Throw
-        End Try
-    End Function
-    ''' <summary>
-    ''' 指定した範囲のデータを取得します。
-    ''' </summary>
-    ''' <param name="filePath">対象ファイルのフルパス。</param>
-    ''' <param name="sheetName">対象シート名。</param>
-    ''' <param name="startCell">最初のセル。</param>
-    ''' <param name="endCell">最後のセル。</param>
-    ''' <param name="cell">Trueに設定した場合、1セルのみを対象とします。</param>
-    ''' <returns></returns>
-    Private Function getRangeExcelData(ByVal filePath As String, ByVal sheetName As String, ByVal startCell As String, ByVal endCell As String, Optional ByVal cell As Boolean = False) As List(Of String)
-        Try
-            Dim xlBook As NetOffice.ExcelApi.Workbook = openExcelBook(filePath)
-            Dim xlSheet As NetOffice.ExcelApi.Worksheet = getExcelSheet(sheetName, xlBook)
-
-            Dim excelDataList As New List(Of String)
-            Dim strArray(,) As Object = CType(xlSheet.Range(startCell, endCell).Value, Object(,))
-            For Each str As String In strArray
-                If IsNothing(str) Then Exit For
-                excelDataList.Add(str)
-            Next
-            Return excelDataList
 
         Catch ex As Exception
             Throw
@@ -459,17 +610,18 @@ Public Class OperateExcel_NetOffice
     ''' <param name="startColumnIdx">最初のセルの列番号。</param>
     ''' <param name="endRowIdx">最後のセルの行番号。</param>
     ''' <param name="endColumnIdx">最後のセルの列番号。</param>
-    ''' <param name="cell">Trueに設定した場合、1セルのみを対象とします。</param>
+    ''' <param name="nothingMode">Trueに設定した場合、値が入っていないセルを発見したタイミングで、取得を終了する。</param>
     ''' <returns></returns>
     Private Function getRangeExcelData(ByVal xlSheet As NetOffice.ExcelApi.Worksheet,
                                        ByVal startRowIdx As Integer, ByVal startColumnIdx As Integer,
                                        ByVal endRowIdx As Integer, ByVal endColumnIdx As Integer,
-                                       Optional ByVal cell As Boolean = False) As List(Of String)
+                                        Optional ByVal nothingMode As Boolean = False) As List(Of String)
         Try
             Dim excelDataList As New List(Of String)
             Dim strArray(,) As Object =
                 CType(xlSheet.Range(xlSheet.Cells(startRowIdx, startColumnIdx), xlSheet.Cells(endRowIdx, endColumnIdx)).Value, Object(,))
             For Each str As String In strArray
+                If nothingMode AndAlso IsNothing(str) Then Exit For
                 excelDataList.Add(str)
             Next
             Return excelDataList
@@ -484,7 +636,10 @@ Public Class OperateExcel_NetOffice
     ''' <returns></returns>
     Private Function formatDataTable() As DataTable
         Try
-            Dim fieldNameList As List(Of String) = getRangeExcelData(mFormatPath, "ヘッダ情報", "A1", "Z1")
+            Dim fieldNameList As List(Of String) = Nothing
+            Using xlSheet As NetOffice.ExcelApi.Worksheet = getExcelSheet("ヘッダー情報", mExcelBookForFormat)
+                fieldNameList = getRangeExcelData(xlSheet, 1, 1, 1, 26, True)
+            End Using
             Dim dTable As New DataTable
             For Each fieldName As String In fieldNameList
                 dTable.Columns.Add(fieldName)
@@ -506,7 +661,9 @@ Public Class OperateExcel_NetOffice
             Dim fieldNameList As List(Of String) = Nothing
             For Each sheetName As String In sheetNameList
                 If sheetName = rep.ToString Then
-                    fieldNameList = getRangeExcelData(mFormatPath, sheetName, "A1", "Z1")
+                    Using xlSheet As NetOffice.ExcelApi.Worksheet = getExcelSheet(sheetName, mExcelBookForFormat)
+                        fieldNameList = getRangeExcelData(xlSheet, 1, 1, 1, 26, True)
+                    End Using
                     Exit For
                 End If
             Next
@@ -542,6 +699,37 @@ Public Class OperateExcel_NetOffice
             Throw
         End Try
     End Function
+    ''' <summary>
+    ''' 指定したシートを削除します。
+    ''' </summary>
+    ''' <param name="filePath">対象Excelファイルのフルパス。</param>
+    ''' <param name="sheetName">対象シート名。</param>
+    Private Sub deleteExcelSheet(ByVal filePath As String, ByVal sheetName As String)
+        Try
+            Using xlBook As NetOffice.ExcelApi.Workbook = openExcelBook(filePath)
+                Using xlSheet As NetOffice.ExcelApi.Worksheet = getExcelSheet(sheetName, xlBook)
+                    xlSheet.Delete()
+                End Using
+                xlBook.Save()
+            End Using
+
+        Catch ex As Exception
+            Throw
+        End Try
+    End Sub
+    ''' <summary>
+    ''' パスを指定し、Excelファイルをコピーします。
+    ''' </summary>
+    ''' <param name="sourceFilePath">コピー元パス。</param>
+    ''' <param name="copiedFilePath">コピー先パス。</param>
+    ''' <param name="overwrite">Trueに設定した場合、同名のファイルが存在した場合に上書きします。</param>
+    Private Sub copyExcelBook(ByVal sourceFilePath As String, ByVal copiedFilePath As String, Optional ByVal overwrite As Boolean = False)
+        Try
+            System.IO.File.Copy(sourceFilePath, copiedFilePath, overwrite)
+        Catch ex As Exception
+            Throw
+        End Try
+    End Sub
 #End Region
 
 #Region "ユーティリティ"
@@ -565,7 +753,7 @@ Public Class OperateExcel_NetOffice
     ''' <summary>
     ''' 指定したリスト内の要素を結合し、文字列を作成します。
     ''' </summary>
-    ''' <param name="strArray">結合対象の配列。</param>
+    ''' <param name="strList">結合対象の配列。</param>
     ''' <returns>結合後の文字列。</returns>
     Private Function combineCharacter(ByVal strList As List(Of String)) As String
         Try
@@ -634,30 +822,6 @@ Public Class OperateExcel_NetOffice
     End Sub
 #End Region
 
-    'Private Sub CreateReportDataList()
-    '    Dim mExcelApp As NetOffice.ExcelApi.Application
 
-    '    Try
-    '        mExcelApp = New NetOffice.ExcelApi.Application
-    '        mExcelApp.DisplayAlerts = False
-    '        mExcelApp.Visible = False
-
-    '        Dim newFilePath As String =
-    '            System.Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory) & "\移行データ_" & DateTime.Now.ToString("yyyyMMdd") & ".xlsx"
-    '        System.IO.File.Copy("D:\Git\MIG\核燃料物質管理システム\ProgramFiles\MIG\MIG\移行データ.xlsx", newFilePath)
-
-    '        Dim xlBook As NetOffice.ExcelApi.Workbook = mExcelApp.Workbooks.Open(newFilePath)
-    '        Dim xlSheet As NetOffice.ExcelApi.Worksheet = CType(xlBook.Worksheets(2), NetOffice.ExcelApi.Worksheet)
-
-    '        For Each filePath As String In filePathList
-    '            Dim rep As ReportType = getReportType(filePath)
-
-
-    '        Next
-
-    '    Catch ex As Exception
-    '        Throw
-    '    End Try
-    'End Sub
 
 End Class

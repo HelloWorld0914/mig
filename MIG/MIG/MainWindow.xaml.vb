@@ -9,29 +9,16 @@ Class MainWindow
             Me.txt_FolderName.Text = dlg.FileName
         End If
 
-        'Dim o As New OperateExcel_NetOffice
-        'o.MigrateReportData("C:\Users\nesi\Desktop\ICR(178) RD(KSKSより）.xls")
-
-        Dim o As New OperateExcel_NetOffice
-        Call o.MigrateReportData(dlg.FileName)
-
     End Sub
 
-    'Private Sub btn_Click(sender As Object, e As RoutedEventArgs) Handles btn.Click
-    '    Dim o As New OperateExcel
+    Private Sub btn_Start_Click(ByVal sender As Object, ByVal e As RoutedEventArgs)
+        Try
+            Dim o As New OperateExcel_NetOffice
+            Call o.MigrateReportData(txt_FolderName.Text)
 
-    '    Try
-    '        o.LoadReport(cmb.SelectedValue.content)
+        Catch ex As Exception
+            MessageBox.Show("フォルダ名を入力してください。")
+        End Try
+    End Sub
 
-
-    '    Catch ex As Exception
-    '        MessageBox.Show(ex.Message)
-
-    '    Finally
-    '        o.Dispose()
-    '        'o = Nothing
-    '        'Me.Close()
-    '    End Try
-
-    'End Sub
 End Class
