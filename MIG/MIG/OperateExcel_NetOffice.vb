@@ -43,6 +43,7 @@ Public Class OperateExcel_NetOffice
     ''' <summary>
     ''' 報告書の種類を表します。
     ''' </summary>
+    ''' 'a
     Private Enum ReportType
         ICR = 3
         PIL = 4
